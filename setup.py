@@ -6,7 +6,7 @@ setup(
     author='Fernando Marcos Wittmann',
     #author_email='fernando.wittmann[at]gmail[dot]com',
     description='A Python tool to rank Google Scholar publications by citations.',
-    long_description=open('README.md').read(),
+    long_description=open('README.md', encoding='UTF-8').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/WittmannF/sort-google-scholar',
     py_modules=['sortgs'],  # Assuming your script is named sortgs.py

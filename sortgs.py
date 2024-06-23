@@ -24,13 +24,18 @@ from time import sleep
 import warnings
 import os
 
+from selenium.webdriver.common.by import By
+
+from random_user_agent.user_agent import UserAgent
+from random_user_agent.params import SoftwareName, OperatingSystem
+
 # Solve conflict between raw_input and input on Python 2 and Python 3
 import sys
 if sys.version[0]=="3": raw_input=input
 
 # Default Parameters
 KEYWORD = 'machine learning' # Default argument if command line is empty
-NRESULTS = 100 # Fetch 100 articles
+NRESULTS = 200 # Fetch 100 articles
 CSVPATH = os.getcwd() # Current folder as default path
 SAVECSV = True
 SORTBY = 'Citations'
@@ -141,7 +146,7 @@ def setup_driver():
     print('Loading...')
     chrome_options = Options()
     chrome_options.add_argument("disable-infobars")
-    driver = webdriver.Chrome(chrome_options=chrome_options)
+    driver = webdriver.Chrome(options=chrome_options)
     return driver
 
 def get_author(content):
@@ -151,14 +156,17 @@ def get_author(content):
             break
     return out
 
-def get_element(driver, xpath, attempts=5, _count=0):
+def get_element(driver, xpath, attempts=30, _count=0):
     '''Safe get_element method with multiple attempts'''
     try:
-        element = driver.find_element_by_xpath(xpath)
+        #element = driver.find_element_by_xpath(xpath)
+        element = driver.find_element(By.XPATH, xpath)
         return element
     except Exception as e:
         if _count<attempts:
-            sleep(1)
+            print(e)
+            sleep(5)
+            print("Attempt "+ str(_count+1))
             get_element(driver, xpath, attempts=attempts, _count=_count+1)
         else:
             print("Element not found")
@@ -204,6 +212,23 @@ def main():
     # Start new session
     session = requests.Session()
     #headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
+    software_names = [SoftwareName.CHROME.value]
+    operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.LINUX.value]   
+    user_agent_rotator = UserAgent(software_names=software_names, operating_systems=operating_systems, limit=100)
+    # Get list of user agents.
+    # Get Random User Agent String.
+    user_agent = {'User-Agent':"Mozilla/5.0 (Windows NT 5.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.87 Safari/537.36,gzip(gfe)",
+                  'Priority':'u=0, i',
+                  'Referer': 'https://scholar.google.com/',
+                  'Sec-Ch-Ua-Mobile':'?0',
+                  'Sec-Ch-Ua-Platform':'''"Windows"''',
+                  'Sec-Fetch-Dest':'document',
+                  'Sec-Fetch-Mode':'navigate',
+                  'Sec-Fetch-Site':'same-origin',
+                  'Sec-Fetch-User':'?1',
+                  'Upgrade-Insecure-Requests':'1',
+                  'Cookie':"""GOOGLE_ABUSE_EXEMPTION=ID=6eaa85d9746a4dc3:TM=1719141919:C=r:IP=112.171.68.18-:S=HODx_Mh8i69QAGxKjsDtEv8; NID=515=DGLG8K9Zv5lq89v2QTZX2kKDGRA-NjqW4SXh2-mjbmcNP8B4RoOAuWYPT6cXc4PDzUSDmjogM1n8bVTH04MpKiKqJk8Ct0QZxPJr5siyiNCr7vrcX4KqMu2WfQMGU7foZuK9z271yxHXQbtd6tbOhVJc3WQ-I6WxIaY-ICpIOAA; GSP=A=TS2elQ:CPTS=1719141927:LM=1719141927:S=XtKzBa9Gmdex1l23"""
+                  }
 
     # Variables
     links = []
@@ -217,6 +242,8 @@ def main():
 
     # Get content from number_of_results URLs
     for n in range(0, number_of_results, 10):
+        if (n % 100 == 0) and n!=0:
+            session = requests.Session()
         #if start_year is None:
         url = GSCHOLAR_MAIN_URL.format(str(n), keyword.replace(' ','+'))
         if debug:
@@ -224,13 +251,21 @@ def main():
         #else:
         #    url=GSCHOLAR_URL_YEAR.format(str(n), keyword.replace(' ','+'), start_year=start_year, end_year=end_year)
 
-        print("Loading next {} results".format(n+10))
-        page = session.get(url)#, headers=headers)
+        print("Loading next {} results".format(n+10))     
+        
+        page = session.get(url, headers=user_agent)
         c = page.content
         if any(kw in c.decode('ISO-8859-1') for kw in ROBOT_KW):
             print("Robot checking detected, handling with selenium (if installed)")
             try:
                 c = get_content_with_selenium(url)
+                if any(kw in c.decode('ISO-8859-1') for kw in ROBOT_KW):
+                    print("Robot checking detected, handling with selenium (if installed)")
+                    try:
+                        c = get_content_with_selenium(url)
+                    except Exception as e:
+                        print("No success. The following error was raised:")
+                        print(e)
             except Exception as e:
                 print("No success. The following error was raised:")
                 print(e)
@@ -282,7 +317,7 @@ def main():
             rank.append(rank[-1]+1)
 
         # Delay 
-        sleep(0.5)
+        sleep(4)
 
     # Create a dataset and sort by the number of citations
     data = pd.DataFrame(list(zip(author, title, citations, year, publisher, venue, links)), index = rank[1:],
